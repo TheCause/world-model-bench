@@ -77,7 +77,19 @@ VJEPA2_VARIANTS = {
 
 
 class VJEPAModel:
-    """V-JEPA 2 inference wrapper via torch.hub."""
+    """
+    V-JEPA 2 inference wrapper via torch.hub.
+
+    API confirmed from vjepa2_demo.py:
+    - torch.hub.load returns (encoder, predictor) tuple
+    - Encoder input: [batch, C, T, H, W] (NOT [batch, T, C, H, W])
+    - Preprocessing: Resize → CenterCrop → ClipToTensor → Normalize
+    - ClipToTensor converts [T, H, W, C] → [C, T, H, W]
+    - Output: [batch, n_patches, embed_dim]
+    """
+
+    IMAGENET_MEAN = (0.485, 0.456, 0.406)
+    IMAGENET_STD = (0.229, 0.224, 0.225)
 
     def __init__(self, variant: str = "vit_huge", device: str = "cuda"):
         self.variant = variant
@@ -87,43 +99,82 @@ class VJEPAModel:
         self.img_size = info["img_size"]
         self.hub_name = info["hub_name"]
         self.encoder = None
-        self.preprocessor = None
         self.loaded = False
 
     def load(self):
-        """Load V-JEPA 2 via torch.hub (downloads weights on first call)."""
+        """Load V-JEPA 2 encoder via torch.hub."""
         result = torch.hub.load(
             "facebookresearch/vjepa2", self.hub_name, trust_repo=True
         )
-        # torch.hub returns (encoder, predictor) tuple — we only need encoder
-        if isinstance(result, tuple):
-            self.encoder = result[0]
-        else:
-            self.encoder = result
+        # torch.hub returns (encoder, predictor) — we only need encoder
+        self.encoder = result[0] if isinstance(result, tuple) else result
         self.encoder = self.encoder.to(self.device).eval()
-        self.preprocessor = torch.hub.load(
-            "facebookresearch/vjepa2", "vjepa2_preprocessor", trust_repo=True
-        )
         self.loaded = True
+
+    def preprocess(self, video: np.ndarray) -> torch.Tensor:
+        """
+        Preprocess a raw video clip for V-JEPA 2 encoder.
+
+        Follows vjepa2_demo.py exactly:
+        1. [T, H, W, C] uint8 → [T, C, H, W] float [0,1]
+        2. Resize short side
+        3. CenterCrop to (img_size, img_size)
+        4. Normalize (ImageNet mean/std)
+        5. Permute to [C, T, H, W] (encoder format)
+
+        Args:
+            video: [T, H, W, C] uint8 numpy array
+
+        Returns:
+            tensor: [C, T, H, W] float32
+        """
+        import torch.nn.functional as F
+
+        # [T, H, W, C] → [T, C, H, W] float
+        v = torch.from_numpy(video).permute(0, 3, 1, 2).float() / 255.0
+        T, C, H, W = v.shape
+
+        # Resize short side
+        short_side = int(256.0 / 224 * self.img_size)
+        if H < W:
+            new_h = short_side
+            new_w = int(W * short_side / H)
+        else:
+            new_w = short_side
+            new_h = int(H * short_side / W)
+        v = F.interpolate(v, size=(new_h, new_w), mode="bilinear", align_corners=False)
+
+        # CenterCrop
+        crop = self.img_size
+        y0 = (new_h - crop) // 2
+        x0 = (new_w - crop) // 2
+        v = v[:, :, y0:y0+crop, x0:x0+crop]  # [T, C, crop, crop]
+
+        # Normalize (ImageNet)
+        mean = torch.tensor(self.IMAGENET_MEAN).view(1, 3, 1, 1)
+        std = torch.tensor(self.IMAGENET_STD).view(1, 3, 1, 1)
+        v = (v - mean) / std
+
+        # [T, C, H, W] → [C, T, H, W] (encoder expects channel-first temporal)
+        v = v.permute(1, 0, 2, 3)  # [C, T, H, W]
+        return v
 
     @torch.inference_mode()
     def encode_videos(self, raw_videos: List[np.ndarray]) -> torch.Tensor:
         """
         Encode raw video arrays.
-        Args: raw_videos — list of [T, H, W, C] uint8 numpy arrays
-        Returns: patch_features [batch, n_patches, embed_dim]
+
+        Args:
+            raw_videos: list of [T, H, W, C] uint8 numpy arrays
+
+        Returns:
+            patch_features: [batch, n_patches, embed_dim]
         """
         batch = []
         for video in raw_videos:
-            # video: [T, H, W, C] uint8 -> [T, C, H, W] float
-            v = torch.from_numpy(video).permute(0, 3, 1, 2).float() / 255.0
-            # preprocessor returns a list of tensor views — take first
-            processed = self.preprocessor(v)
-            if isinstance(processed, list):
-                processed = processed[0]
+            processed = self.preprocess(video)  # [C, T, H, W]
             batch.append(processed)
-        # Stack batch — all should be same shape after preprocessing
-        x = torch.stack(batch).to(self.device)
+        x = torch.stack(batch).to(self.device)  # [B, C, T, H, W]
         return self.encoder(x)
 
 
