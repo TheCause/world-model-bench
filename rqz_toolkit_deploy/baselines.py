@@ -2,7 +2,7 @@
 Baselines and post-hoc competitors for "Beyond Binary Validity" benchmark.
 
 Baselines (T1 — detection):
-  ADWIN, DDM, KSWIN from `river` library
+  ADWIN, PageHinkley, KSWIN from `river` library
 
 Post-hoc competitors (C3 — non-trivialite):
   PH1-PH5 attempt to discriminate NOISE from DRIFT using simple heuristics
@@ -196,12 +196,12 @@ def ph1_adwin_rho(errors: np.ndarray, window: int = 20) -> DiagnosisResult:
         return DiagnosisResult("GRADUAL_DRIFT", 0.5, rho)
 
 
-def ph2_ddm_rho(errors: np.ndarray, window: int = 20) -> DiagnosisResult:
-    """PH2: DDM + rho post-hoc."""
-    ddm = PageHinkleyBaseline()
+def ph2_pagehinkley_rho(errors: np.ndarray, window: int = 20) -> DiagnosisResult:
+    """PH2: PageHinkley + rho post-hoc."""
+    ph = PageHinkleyBaseline()
     for e in errors:
-        ddm.update(float(e))
-    det = ddm.result()
+        ph.update(float(e))
+    det = ph.result()
 
     if not det.detected:
         return DiagnosisResult("NOMINAL", 0.5, None)
@@ -295,8 +295,8 @@ def ph1b_adwin_continuous_rho(errors: np.ndarray, window: int = 20) -> Diagnosis
     return _baseline_plus_continuous_rho(ADWINBaseline, errors, window)
 
 
-def ph2b_ddm_continuous_rho(errors: np.ndarray, window: int = 20) -> DiagnosisResult:
-    """PH2b: DDM + continuous rho (fairness variant)."""
+def ph2b_pagehinkley_continuous_rho(errors: np.ndarray, window: int = 20) -> DiagnosisResult:
+    """PH2b: PageHinkley + continuous rho (fairness variant)."""
     return _baseline_plus_continuous_rho(PageHinkleyBaseline, errors, window)
 
 
@@ -330,8 +330,8 @@ def ph5_variance_ratio(errors: np.ndarray, window: int = 20) -> DiagnosisResult:
 ALL_POST_HOCS = {
     "PH1": ph1_adwin_rho,
     "PH1b": ph1b_adwin_continuous_rho,
-    "PH2": ph2_ddm_rho,
-    "PH2b": ph2b_ddm_continuous_rho,
+    "PH2": ph2_pagehinkley_rho,
+    "PH2b": ph2b_pagehinkley_continuous_rho,
     "PH3": ph3_kswin_rho,
     "PH3b": ph3b_kswin_continuous_rho,
     "PH4": ph4_slope_heuristic,
