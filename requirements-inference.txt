@@ -1,0 +1,28 @@
+# world-model-bench — Inference-only dependencies
+# Minimal set for V-JEPA 2 inference + scientific benchmarking
+# Training deps (wandb, tensorboard, submitit, etc.) NOT included
+# Install them on the volume if needed: pip install wandb tensorboard
+
+# Core ML
+torch>=2
+torchvision
+numpy
+scipy
+
+# V-JEPA 2 inference
+timm
+transformers
+einops
+beartype
+pyyaml
+
+# Video processing
+decord
+opencv-python
+
+# Visualization (results, not training)
+matplotlib
+
+# Data
+pandas
+h5py
