@@ -92,9 +92,14 @@ class VJEPAModel:
 
     def load(self):
         """Load V-JEPA 2 via torch.hub (downloads weights on first call)."""
-        self.encoder = torch.hub.load(
+        result = torch.hub.load(
             "facebookresearch/vjepa2", self.hub_name, trust_repo=True
         )
+        # torch.hub returns (encoder, predictor) tuple
+        if isinstance(result, tuple):
+            self.encoder = result[0]
+        else:
+            self.encoder = result
         self.encoder = self.encoder.to(self.device).eval()
         self.preprocessor = torch.hub.load(
             "facebookresearch/vjepa2", "vjepa2_preprocessor", trust_repo=True
