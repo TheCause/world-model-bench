@@ -16,9 +16,9 @@ echo "============================================"
 # 0. Python deps (skipped if already installed)
 # -----------------------------------------------
 echo "[0/4] Checking Python dependencies..."
-python3 -c "import timm, transformers, einops, decord" 2>/dev/null || {
+python3 -c "import timm, transformers, einops, decord, xformers" 2>/dev/null || {
     echo "  Installing inference deps..."
-    pip install --no-cache-dir timm transformers einops beartype decord \
+    pip install --no-cache-dir xformers timm transformers einops beartype decord \
         opencv-python scipy matplotlib pandas h5py pyyaml 2>&1 | tail -3
 }
 echo "  Dependencies OK"
@@ -53,17 +53,20 @@ fi
 # 3. Pre-fetch V-JEPA 2 weights (cached on volume)
 # -----------------------------------------------
 echo "[3/4] Checking V-JEPA 2 weights..."
-if [ -d "/workspace/.cache/torch/hub/facebookresearch_vjepa2_main" ]; then
-    echo "  Weights already cached"
+WEIGHTS="/workspace/.cache/torch/hub/checkpoints/vith.pt"
+if [ -f "$WEIGHTS" ]; then
+    echo "  Weights already cached ($(du -h $WEIGHTS | cut -f1))"
 else
     echo "  Downloading V-JEPA 2 ViT-H (~9.7GB, first time only)..."
-    python3 -c "
-import torch
-print('Fetching ViT-H...')
-m = torch.hub.load('facebookresearch/vjepa2', 'vjepa2_vit_huge', trust_repo=True)
-print('Cached OK')
-del m; torch.cuda.empty_cache()
-" || echo "  WARNING: Download failed. Will retry on first benchmark run."
+    mkdir -p /workspace/.cache/torch/hub/checkpoints
+    curl -L -o "$WEIGHTS" https://dl.fbaipublicfiles.com/vjepa2/vith.pt \
+        && echo "  Download OK ($(du -h $WEIGHTS | cut -f1))" \
+        || echo "  WARNING: Download failed. Will retry on first benchmark run."
+fi
+# Also cache torch.hub repo metadata
+if [ ! -d "/workspace/.cache/torch/hub/facebookresearch_vjepa2_main" ]; then
+    python3 -c "import torch; torch.hub.load('facebookresearch/vjepa2', 'vjepa2_vit_huge', trust_repo=True, force_reload=False)" 2>/dev/null \
+        || echo "  Hub metadata cached via deps install"
 fi
 
 # -----------------------------------------------
