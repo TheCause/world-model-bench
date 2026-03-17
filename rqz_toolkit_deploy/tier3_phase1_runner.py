@@ -95,7 +95,7 @@ class VJEPAModel:
         result = torch.hub.load(
             "facebookresearch/vjepa2", self.hub_name, trust_repo=True
         )
-        # torch.hub returns (encoder, predictor) tuple
+        # torch.hub returns (encoder, predictor) tuple — we only need encoder
         if isinstance(result, tuple):
             self.encoder = result[0]
         else:
@@ -115,18 +115,15 @@ class VJEPAModel:
         """
         batch = []
         for video in raw_videos:
+            # video: [T, H, W, C] uint8 -> [T, C, H, W] float
             v = torch.from_numpy(video).permute(0, 3, 1, 2).float() / 255.0
-            v = self.preprocessor(v)
-            batch.append(v)
-        # Pad to same temporal length if needed (Fix #4)
-        max_t = max(b.shape[1] for b in batch)
-        padded = []
-        for b in batch:
-            if b.shape[1] < max_t:
-                pad = torch.zeros(b.shape[0], max_t - b.shape[1], *b.shape[2:])
-                b = torch.cat([b, pad], dim=1)
-            padded.append(b)
-        x = torch.stack(padded).to(self.device)
+            # preprocessor returns a list of tensor views — take first
+            processed = self.preprocessor(v)
+            if isinstance(processed, list):
+                processed = processed[0]
+            batch.append(processed)
+        # Stack batch — all should be same shape after preprocessing
+        x = torch.stack(batch).to(self.device)
         return self.encoder(x)
 
 
