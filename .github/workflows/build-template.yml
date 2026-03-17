@@ -2,8 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    paths:
-      - '_tools/world-model-bench/**'
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -38,7 +37,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: _tools/world-model-bench
+          context: .
           platforms: linux/amd64
           push: true
           tags: |
