@@ -140,8 +140,13 @@ class VectorialMonitor:
         for i in range(self.d):
             buf = list(self.raw_buf[i])
             if len(buf) >= self.cfg.w_rho:
-                signs = np.sign(buf)
-                rho[i] = np.sum(signs[:-1] != signs[1:]) / (len(buf) - 1)
+                # Fix: operate on residuals (diffs), not raw values
+                # Raw values may be non-negative (L2 norms) → sign always +1
+                diffs = np.diff(buf)
+                signs = np.sign(diffs)
+                signs = signs[signs != 0]
+                if len(signs) >= 2:
+                    rho[i] = np.sum(signs[:-1] != signs[1:]) / (len(signs) - 1)
         return R, rho
 
     def detect(self, R: np.ndarray, rho: np.ndarray) -> Set[int]:
