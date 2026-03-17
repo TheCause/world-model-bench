@@ -87,8 +87,6 @@ echo "Deploy scripts:  scp -P <port> scripts.py root@<ip>:/workspace/benchmarks/
 echo "Monitor:         curl https://<pod-id>-8080.proxy.runpod.net/"
 echo "============================================"
 
-# Start SSH daemon (RunPod needs it for TCP direct access)
-/etc/init.d/ssh start 2>/dev/null || service ssh start 2>/dev/null || true
-
-# Keep container alive (background, doesn't block RunPod init)
-tail -f /dev/null
+# NOTE: This script must be launched with & in the start command:
+#   bash -c "curl -sL .../bootstrap.sh | bash &"
+# The & ensures RunPod's init process starts SSH normally.
