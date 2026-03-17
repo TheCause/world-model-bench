@@ -81,14 +81,20 @@ class DualHorizon:
 
     def compute_rho(self) -> float:
         """
-        Sign change rate rho in [0, 1].
-        rho ~ 0.5 -> random noise (i.i.d.)
-        rho ~ 0.0 -> systematic drift (same sign)
+        Sign change rate rho on error RESIDUALS in [0, 1].
+        rho ~ 0.5 -> random noise (i.i.d. residuals, alternating signs)
+        rho ~ 0.0 -> systematic drift (monotonic residuals, same sign)
+
+        Operates on diffs d(t) = e(t) - e(t-1), not raw values.
         """
-        if len(self.error_history) < self.cfg.sign_window:
+        if len(self.error_history) < self.cfg.sign_window + 1:
             return 0.5
-        recent = np.array(self.error_history[-self.cfg.sign_window:])
-        signs = np.sign(recent)
+        recent = np.array(self.error_history[-(self.cfg.sign_window + 1):])
+        diffs = np.diff(recent)
+        signs = np.sign(diffs)
+        signs = signs[signs != 0]  # remove zeros
+        if len(signs) < 2:
+            return 0.5
         changes = np.sum(signs[1:] != signs[:-1])
         return float(changes / (len(signs) - 1))
 
